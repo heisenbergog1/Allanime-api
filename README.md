@@ -163,6 +163,26 @@ Open this URL in your browser, VLC, or any media player — it plays directly.
 
 ---
 
+### `GET /download?show_id=<id>&ep_no=<num>&mode=<sub|dub>&quality=<best|worst|1080p>&season=<S1>&title=<custom>`
+
+**Download the video file** directly to your device. The response includes a `Content-Disposition` header that triggers a file download with an auto-generated filename.
+
+**Example:**
+```
+http://localhost:5678/download?show_id=ReooPAxPMsHM4KPMY&ep_no=1
+```
+
+**Auto-generated filename format:**
+```
+Anime_Title_S1E01_1080p.mp4
+```
+
+**Optional parameters:**
+- `season` - Season number (default: S1)
+- `title` - Custom filename (overrides auto-generated name)
+
+---
+
 ### `POST /thumbnails`
 
 Get thumbnails for multiple anime in one request.
@@ -182,6 +202,8 @@ Get thumbnails for multiple anime in one request.
 | ---------- | ---------------- | ------- | --------------------------- |
 | `mode`     | `sub`, `dub`     | `sub`   | Subbed or dubbed version    |
 | `quality`  | `best`, `worst`, `1080p`, `720p`, `480p` | `best` | Video quality |
+| `season`   | `S1`, `S2`, etc. | `S1`    | Season number (for download)|
+| `title`    | any string       | -       | Custom filename (download) |
 
 ## License
 

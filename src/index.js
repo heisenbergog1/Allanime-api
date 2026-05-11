@@ -134,6 +134,77 @@ app.get('/play', async (req, res) => {
     }
 });
 
+// Download endpoint: forces browser to download the video file
+// Usage: /download?show_id=<id>&ep_no=<num>&mode=<sub|dub>&quality=<best|worst|1080p|etc>&title=<optional_filename>
+app.get('/download', async (req, res) => {
+    const id = req.query.show_id;
+    const epNo = req.query.ep_no;
+    const qualityParam = req.query.quality || 'best';
+    const mode = req.query.mode === 'dub' ? 'dub' : 'sub';
+    const customTitle = req.query.title;
+    const season = req.query.season || 'S1';
+
+    if (!id || !epNo) return res.status(400).json({ error: "Missing show_id or ep_no" });
+
+    try {
+        // Fetch anime details and episode URL in parallel for speed
+        const [details, url] = await Promise.all([
+            scraper.getAnimeDetails(id).catch(() => null),
+            scraper.getEpisodeUrl(id, epNo, mode, qualityParam)
+        ]);
+
+        if (!url) return res.status(404).json({ error: "Episode not found or URL not available" });
+
+        // Get anime title from details
+        let animeTitle = id;
+        if (details && details.title) {
+            animeTitle = details.title.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+        }
+
+        // Determine quality from URL if possible
+        let resolvedQuality = qualityParam;
+        if (qualityParam === 'best' || qualityParam === 'worst') {
+            const qualityMatch = url.match(/(\d{3,4}p)/);
+            resolvedQuality = qualityMatch ? qualityMatch[1] : '1080p';
+        }
+
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+            'Referer': 'https://allmanga.to'
+        };
+
+        const videoResp = await axios.get(url, {
+            headers,
+            responseType: 'stream',
+            timeout: 15000
+        });
+
+        // Generate filename: Anime_Title_S1E1_1080p.mp4
+        const filename = customTitle
+            ? `${customTitle}.mp4`
+            : `${animeTitle}_${season}E${epNo}_${resolvedQuality}.mp4`;
+
+        res.setHeader('Content-Type', 'video/mp4');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        if (videoResp.headers['content-length']) {
+            res.setHeader('Content-Length', videoResp.headers['content-length']);
+        }
+        res.status(videoResp.status);
+
+        videoResp.data.pipe(res);
+
+        res.on('close', () => {
+            videoResp.data.destroy();
+        });
+
+    } catch (e) {
+        if (!res.headersSent) {
+            const status = e.message && e.message.startsWith('NEED_CAPTCHA') ? 503 : 500;
+            res.status(status).json({ error: e.message });
+        }
+    }
+});
+
 app.get('/episode_info', async (req, res) => {
     const id = req.query.show_id;
     const epNo = req.query.ep_no;
@@ -189,7 +260,8 @@ app.get('/', (req, res) => {
             "/episodes/<id>?mode=<sub|dub>",
             "/episode_info?show_id=<id>&ep_no=<ep_no>",
             "/episode_url?show_id=<id>&ep_no=<ep_no>&quality=<quality>&mode=<sub|dub>",
-            "/play?show_id=<id>&ep_no=<ep_no>&quality=<quality>&mode=<sub|dub> (streams video directly)"
+            "/play?show_id=<id>&ep_no=<ep_no>&quality=<quality>&mode=<sub|dub> (streams video directly)",
+            "/download?show_id=<id>&ep_no=<ep_no>&quality=<quality>&mode=<sub|dub>&title=<optional> (downloads video)"
         ]
     });
 });

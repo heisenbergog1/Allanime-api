@@ -16,7 +16,8 @@ app.get('/', (c) => c.json({
         "/episodes/<id>?mode=<sub|dub>",
         "/episode_info?show_id=<id>&ep_no=<ep_no>",
         "/episode_url?show_id=<id>&ep_no=<ep_no>&quality=<quality>&mode=<sub|dub>",
-        "/play?show_id=<id>&ep_no=<ep_no>&quality=<quality>&mode=<sub|dub> (streams video directly)"
+        "/play?show_id=<id>&ep_no=<ep_no>&quality=<quality>&mode=<sub|dub> (streams video directly)",
+        "/download?show_id=<id>&ep_no=<ep_no>&quality=<quality>&mode=<sub|dub>&title=<optional> (downloads video)"
     ]
 }));
 
@@ -103,6 +104,66 @@ app.get('/play', async (c) => {
         }
         if (videoResp.headers.get('accept-ranges')) {
             respHeaders.set('Accept-Ranges', videoResp.headers.get('accept-ranges'));
+        }
+
+        return new Response(videoResp.body, {
+            status: videoResp.status,
+            headers: respHeaders
+        });
+    } catch (e) {
+        const status = e.message && e.message.startsWith('NEED_CAPTCHA') ? 503 : 500;
+        return c.json({ error: e.message }, status);
+    }
+});
+
+app.get('/download', async (c) => {
+    const id = c.req.query('show_id');
+    const epNo = c.req.query('ep_no');
+    const qualityParam = c.req.query('quality') || 'best';
+    const mode = c.req.query('mode') === 'dub' ? 'dub' : 'sub';
+    const customTitle = c.req.query('title');
+    const season = c.req.query('season') || 'S1';
+
+    if (!id || !epNo) return c.json({ error: "Missing show_id or ep_no" }, 400);
+
+    try {
+        // Fetch anime details and episode URL in parallel for speed
+        const [details, url] = await Promise.all([
+            scraper.getAnimeDetails(id).catch(() => null),
+            scraper.getEpisodeUrl(id, epNo, mode, qualityParam)
+        ]);
+
+        if (!url) return c.json({ error: "Episode not found or URL not available" }, 404);
+
+        // Get anime title from details
+        let animeTitle = id;
+        if (details && details.title) {
+            animeTitle = details.title.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+        }
+
+        // Determine quality
+        let resolvedQuality = qualityParam;
+        if (qualityParam === 'best' || qualityParam === 'worst') {
+            const qualityMatch = url.match(/(\d{3,4}p)/);
+            resolvedQuality = qualityMatch ? qualityMatch[1] : '1080p';
+        }
+
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+            'Referer': 'https://allmanga.to'
+        };
+
+        const videoResp = await fetch(url, { headers });
+
+        const filename = customTitle
+            ? `${customTitle}.mp4`
+            : `${animeTitle}_${season}E${epNo}_${resolvedQuality}.mp4`;
+
+        const respHeaders = new Headers();
+        respHeaders.set('Content-Type', 'video/mp4');
+        respHeaders.set('Content-Disposition', `attachment; filename="${filename}"`);
+        if (videoResp.headers.get('content-length')) {
+            respHeaders.set('Content-Length', videoResp.headers.get('content-length'));
         }
 
         return new Response(videoResp.body, {
