@@ -1,5 +1,5 @@
 import { Hono } from 'https://deno.land/x/hono@v4.3.9/mod.ts';
-import { cors } from 'https://deno.land/x/hono@v4.3.9/cors.ts';
+import { cors } from 'https://deno.land/x/hono@v4.3.9/middleware/cors/index.ts';
 import * as scraper from './scraper.ts';
 
 const app = new Hono();
