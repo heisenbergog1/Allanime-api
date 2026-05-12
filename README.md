@@ -2,32 +2,58 @@
 
 A fast, lightweight Node.js API to search anime, get episode lists, and stream videos — powered by Allanime.
 
-## Setup
+## Deployment Options
 
-### Option 1: Cloudflare Workers (Recommended)
+### Option 1: Cloudflare Workers (Free, Serverless)
 
-Host the API on Cloudflare's global edge network for free. It is fully stateless, serverless, and highly performant.
+Deploy to Cloudflare's edge network. **Note:** Some video sources (fast4speed) may return 403 when proxied through CF — these will redirect to direct URL instead.
 
 ```bash
 cd worker
 npm install
-npm run deploy
+npx wrangler deploy
 ```
 
-*This will prompt you to log into your Cloudflare account and deploy the API to a `*.workers.dev` domain.*
+**Limits:** 100K requests/day, 10ms CPU time per request
 
 ---
 
-### Option 2: Local / Node.js Server
+### Option 2: Vercel (Free, Best Streaming Support)
 
-Run the API as a standard Node.js Express server.
+Full video proxy support — works with all video sources including fast4speed. **Note:** 100GB bandwidth limit/month.
+
+```bash
+npm install -g vercel
+vercel --prod
+```
+
+Or deploy via GitHub: [vercel.com/new](https://vercel.com/new)
+
+---
+
+### Option 3: Netlify (Free, Good Streaming Support)
+
+Similar to Vercel — full proxy support, 125K requests/month.
+
+```bash
+npm install -g netlify-cli
+netlify deploy --prod
+```
+
+Or connect via GitHub: [app.netlify.com](https://app.netlify.com)
+
+---
+
+### Option 4: Local / Node.js Server
+
+Run locally on your machine.
 
 ```bash
 npm install
 npm start
 ```
 
-The server runs on `http://localhost:5678` by default. Set `PORT` in `.env` to change it.
+Server runs on `http://localhost:5678`. Set `PORT` in `.env` to change.
 
 ---
 
@@ -50,12 +76,6 @@ GET /search?query=one piece
     "title": "One Piece",
     "episodes_sub": 1159,
     "episodes_dub": 1149
-  },
-  {
-    "id": "goYFnpCpue3Mpi2pQ",
-    "title": "One Piece Film: Red",
-    "episodes_sub": 1,
-    "episodes_dub": 1
   }
 ]
 ```
@@ -71,20 +91,6 @@ Get details for a specific anime.
 GET /anime/ReooPAxPMsHM4KPMY
 ```
 
-**Response:**
-```json
-{
-  "id": "ReooPAxPMsHM4KPMY",
-  "title": "One Piece",
-  "title_english": "One Piece",
-  "thumbnail_url": "https://wp.youtube-anime.com/aln.youtube-anime.com/images/...",
-  "synopsis": "Gol D. Roger was known as the Pirate King...",
-  "status": "Releasing",
-  "episodes_sub": 1159,
-  "episodes_dub": 1149
-}
-```
-
 ---
 
 ### `GET /episodes/<id>?mode=<sub|dub>`
@@ -96,90 +102,39 @@ Get the list of available episode numbers.
 GET /episodes/ReooPAxPMsHM4KPMY?mode=sub
 ```
 
-**Response:**
-```json
-{
-  "mode": "sub",
-  "episodes": ["1", "2", "3", "4", "5", "..."]
-}
-```
-
 ---
 
 ### `GET /episode_info?show_id=<id>&ep_no=<num>`
 
 Get metadata for a specific episode, including thumbnails, title, and description.
 
-**Example:**
-```
-GET /episode_info?show_id=ReooPAxPMsHM4KPMY&ep_no=1
-```
-
-**Response:**
-```json
-{
-  "episode_no": 1,
-  "title": "Original Title: I'm Luffy! The Man Who Will Become the Pirate King!",
-  "description": "Alvida’s Pirate Crew is terrorizing a cruise ship and they’ve found a barrel...",
-  "thumbnails": [
-    "https://allanime.day/data2/ep_tbs/ReooPAxPMsHM4KPMY/1_dub.jpg",
-    "https://static.wixstatic.com/media/a3bb38_53b4872d69c84e40bc5698680d2efb4bf001.jpg"
-  ]
-}
-```
-
 ---
-
 
 ### `GET /episode_url?show_id=<id>&ep_no=<num>&mode=<sub|dub>&quality=<best|worst|1080p>`
 
 Get the direct video URL for an episode.
 
-**Example:**
-```
-GET /episode_url?show_id=ReooPAxPMsHM4KPMY&ep_no=1&mode=sub&quality=best
-```
-
-**Response:**
-```json
-{
-  "episode_url": "https://video.wixstatic.com/video/.../1080p/mp4/file.mp4",
-  "mode": "sub"
-}
-```
-
 ---
 
 ### `GET /play?show_id=<id>&ep_no=<num>&mode=<sub|dub>&quality=<best|worst|1080p>`
 
-**Stream the video directly** in your browser or any video player. This proxies the video through the API with the required headers.
+**Stream the video directly** in your browser or any video player. This proxies the video through the API with required headers.
 
 **Example:**
 ```
-http://localhost:5678/play?show_id=ReooPAxPMsHM4KPMY&ep_no=1
+/play?show_id=ReooPAxPMsHM4KPMY&ep_no=1
 ```
-
-Open this URL in your browser, VLC, or any media player — it plays directly.
 
 ---
 
 ### `GET /download?show_id=<id>&ep_no=<num>&mode=<sub|dub>&quality=<best|worst|1080p>&season=<S1>&title=<custom>`
 
-**Download the video file** directly to your device. The response includes a `Content-Disposition` header that triggers a file download with an auto-generated filename.
+**Download the video file** directly to your device.
 
-**Example:**
-```
-http://localhost:5678/download?show_id=ReooPAxPMsHM4KPMY&ep_no=1
-```
-
-**Auto-generated filename format:**
+**Auto-generated filename:**
 ```
 Anime_Title_S1E01_1080p.mp4
 ```
-
-**Optional parameters:**
-- `season` - Season number (default: S1)
-- `title` - Custom filename (overrides auto-generated name)
 
 ---
 
@@ -198,12 +153,25 @@ Get thumbnails for multiple anime in one request.
 
 ## Parameters
 
-| Parameter  | Values           | Default | Description                 |
-| ---------- | ---------------- | ------- | --------------------------- |
-| `mode`     | `sub`, `dub`     | `sub`   | Subbed or dubbed version    |
-| `quality`  | `best`, `worst`, `1080p`, `720p`, `480p` | `best` | Video quality |
-| `season`   | `S1`, `S2`, etc. | `S1`    | Season number (for download)|
-| `title`    | any string       | -       | Custom filename (download) |
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `mode` | `sub`, `dub` | `sub` | Subbed or dubbed version |
+| `quality` | `best`, `worst`, `1080p`, `720p`, `480p` | `best` | Video quality |
+| `season` | `S1`, `S2`, etc. | `S1` | Season number (for download) |
+| `title` | any string | - | Custom filename (download) |
+
+---
+
+## Deployment Comparison
+
+| Platform | Video Proxy | Bandwidth/Requests | Best For |
+|----------|------------|-------------------|----------|
+| **Vercel** | Full support | 100GB/mo | Best streaming, limited bandwidth |
+| **Netlify** | Full support | 125K requests/mo | Good streaming, request-based limits |
+| **Cloudflare Workers** | Partial (redirect for fast4speed) | 100K/day | Free, global edge, some sources blocked |
+| **Local** | Full support | Unlimited | Development, self-hosting |
+
+---
 
 ## License
 
