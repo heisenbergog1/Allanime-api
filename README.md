@@ -31,7 +31,22 @@ Or deploy via GitHub: [vercel.com/new](https://vercel.com/new)
 
 ---
 
-### Option 3: Local / Node.js Server
+### Option 3: VPS Server (Unlimited Bandwidth)
+
+Deploy on your own VPS with nginx + SSL for unlimited bandwidth. Perfect for self-hosting with no restrictions.
+
+```bash
+git clone https://github.com/mdtahseen7/Allanime-api.git
+cd Allanime-api
+npm install
+pm2 start src/index.js --name anime-api
+```
+
+Then configure nginx with your domain + Let's Encrypt SSL.
+
+---
+
+### Option 4: Local / Node.js Server
 
 Run locally on your machine.
 
@@ -151,11 +166,12 @@ Get thumbnails for multiple anime in one request.
 
 ## Deployment Comparison
 
-| Platform | Video Proxy | Bandwidth/Requests | Best For |
-|----------|------------|-------------------|----------|
-| **Vercel** | Full support | 100GB/mo | Best streaming, limited bandwidth |
-| **Cloudflare Workers** | Partial (redirect for fast4speed) | 100K/day | Free, global edge, some sources blocked |
-| **Local** | Full support | Unlimited | Development, self-hosting |
+| Platform | Video Streaming | Notes |
+|----------|----------------|-------|
+| **Vercel** | Full support | 100GB/mo bandwidth limit |
+| **VPS Server** | Full support | Unlimited bandwidth, self-hosted |
+| **Cloudflare Workers** | Partial | `fast4speed` sources blocked (403), others work |
+| **Local** | Full support | Development only |
 
 ---
 
