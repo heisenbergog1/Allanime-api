@@ -1,4 +1,4 @@
-const scraper = require('../src/scraper');
+const scraper = require('./scraper');
 
 exports.handler = async function (event, context) {
   const path = event.path || '/';
