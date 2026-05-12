@@ -84,32 +84,44 @@ app.get('/play', async (c) => {
         const url = await scraper.getEpisodeUrl(id, epNo, mode, quality);
         if (!url) return c.json({ error: "Episode not found or URL not available" }, 404);
 
-        const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-            'Referer': 'https://allmanga.to'
-        };
+        // fast4speed requires redirect — CF Worker can't proxy it (403)
+        if (url.includes('fast4speed.rsvp')) {
+            const respHeaders = new Headers();
+            respHeaders.set('Content-Type', 'video/mp4');
+            respHeaders.set('Access-Control-Allow-Origin', '*');
+            respHeaders.set('Location', url);
+            return new Response(null, { status: 302, headers: respHeaders });
+        }
+
+        // Other sources (wixstatic, etc.) — proxy directly
         const range = c.req.header('Range');
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+            'Referer': 'https://allmanga.to',
+            'Accept': '*/*',
+            'Accept-Encoding': 'gzip, deflate, br'
+        };
         if (range) headers['Range'] = range;
 
         const videoResp = await fetch(url, { headers });
 
+        if (videoResp.status >= 400) {
+            return c.json({ error: `Video source returned ${videoResp.status}` }, 502);
+        }
+
         const respHeaders = new Headers();
         respHeaders.set('Content-Type', 'video/mp4');
         respHeaders.set('Content-Disposition', 'inline');
+        respHeaders.set('Access-Control-Allow-Origin', '*');
         if (videoResp.headers.get('content-length')) {
             respHeaders.set('Content-Length', videoResp.headers.get('content-length'));
-        }
-        if (videoResp.headers.get('content-range')) {
-            respHeaders.set('Content-Range', videoResp.headers.get('content-range'));
         }
         if (videoResp.headers.get('accept-ranges')) {
             respHeaders.set('Accept-Ranges', videoResp.headers.get('accept-ranges'));
         }
+        respHeaders.set('Cache-Control', 'no-store');
 
-        return new Response(videoResp.body, {
-            status: videoResp.status,
-            headers: respHeaders
-        });
+        return new Response(videoResp.body, { status: videoResp.status, headers: respHeaders });
     } catch (e) {
         const status = e.message && e.message.startsWith('NEED_CAPTCHA') ? 503 : 500;
         return c.json({ error: e.message }, status);
@@ -127,7 +139,6 @@ app.get('/download', async (c) => {
     if (!id || !epNo) return c.json({ error: "Missing show_id or ep_no" }, 400);
 
     try {
-        // Fetch anime details and episode URL in parallel for speed
         const [details, url] = await Promise.all([
             scraper.getAnimeDetails(id).catch(() => null),
             scraper.getEpisodeUrl(id, epNo, mode, qualityParam)
@@ -135,36 +146,52 @@ app.get('/download', async (c) => {
 
         if (!url) return c.json({ error: "Episode not found or URL not available" }, 404);
 
-        // Get anime title from details
         let animeTitle = id;
         if (details && details.title) {
             animeTitle = details.title.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
         }
 
-        // Determine quality
         let resolvedQuality = qualityParam;
         if (qualityParam === 'best' || qualityParam === 'worst') {
             const qualityMatch = url.match(/(\d{3,4}p)/);
             resolvedQuality = qualityMatch ? qualityMatch[1] : '1080p';
         }
 
-        const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-            'Referer': 'https://allmanga.to'
-        };
-
-        const videoResp = await fetch(url, { headers });
-
         const filename = customTitle
             ? `${customTitle}.mp4`
             : `${animeTitle}_${season}E${epNo}_${resolvedQuality}.mp4`;
 
+        // If fast4speed URL, use redirect (CF Worker can't proxy it)
+        if (url.includes('fast4speed.rsvp')) {
+            const respHeaders = new Headers();
+            respHeaders.set('Content-Type', 'video/mp4');
+            respHeaders.set('Content-Disposition', `attachment; filename="${filename}"`);
+            respHeaders.set('Access-Control-Allow-Origin', '*');
+            respHeaders.set('Location', url);
+            return new Response(null, { status: 302, headers: respHeaders });
+        }
+
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+            'Referer': 'https://allmanga.to',
+            'Accept': '*/*',
+            'Accept-Encoding': 'gzip, deflate, br'
+        };
+
+        const videoResp = await fetch(url, { headers });
+
+        if (videoResp.status >= 400) {
+            return c.json({ error: `Video source returned ${videoResp.status}` }, 502);
+        }
+
         const respHeaders = new Headers();
         respHeaders.set('Content-Type', 'video/mp4');
         respHeaders.set('Content-Disposition', `attachment; filename="${filename}"`);
+        respHeaders.set('Access-Control-Allow-Origin', '*');
         if (videoResp.headers.get('content-length')) {
             respHeaders.set('Content-Length', videoResp.headers.get('content-length'));
         }
+        respHeaders.set('Cache-Control', 'no-store');
 
         return new Response(videoResp.body, {
             status: videoResp.status,
