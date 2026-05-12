@@ -31,9 +31,9 @@ Or deploy via GitHub: [vercel.com/new](https://vercel.com/new)
 
 ---
 
-### Option 3: Netlify (Free, Good Streaming Support)
+### Option 3: Netlify (Free, Redirect for Video)
 
-Similar to Vercel — full proxy support, 125K requests/month.
+Full API support with redirect for video streaming — works with all video sources.
 
 ```bash
 npm install -g netlify-cli
@@ -41,6 +41,8 @@ netlify deploy --prod
 ```
 
 Or connect via GitHub: [app.netlify.com](https://app.netlify.com)
+
+**Note:** Video endpoints (`/play`, `/download`) use 302 redirects to direct video URLs — the browser follows automatically and plays the video.
 
 ---
 
