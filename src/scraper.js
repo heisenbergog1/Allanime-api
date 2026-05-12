@@ -15,8 +15,26 @@ const axiosInstance = axios.create({
         'User-Agent': AGENT,
         'Referer': ALLANIME_REFR
     },
-    timeout: 5000
+    timeout: 8000
 });
+
+// Validate video URL by checking HTTP status
+async function isValidUrl(url) {
+    try {
+        const resp = await axios.head(url, {
+            headers: {
+                'User-Agent': AGENT,
+                'Referer': ALLANIME_REFR
+            },
+            timeout: 5000,
+            maxRedirects: 3
+        });
+        // Valid if 2xx or 3xx, invalid if 4xx or 5xx
+        return resp.status < 400;
+    } catch (e) {
+        return false;
+    }
+}
 
 function decrypt(blob) {
     try {
@@ -127,7 +145,15 @@ async function getLinks(providerPath) {
 
     // If path contains tools.fast4speed.rsvp, output it directly (direct mp4 link)
     if (providerPath.includes('tools.fast4speed.rsvp')) {
-        allLinks.push({ resolution: 'Yt', url: providerPath });
+        // fast4speed.rsvp requires ?v=1 parameter for video to work
+        let validatedUrl = providerPath;
+        if (!providerPath.includes('?v=')) {
+            validatedUrl = providerPath + (providerPath.includes('?') ? '&' : '?') + 'v=1';
+        }
+        // Validate the full URL with v=1 parameter before returning
+        if (await isValidUrl(validatedUrl)) {
+            allLinks.push({ resolution: 'Yt', url: validatedUrl });
+        }
         return allLinks;
     }
 
@@ -276,40 +302,46 @@ async function getEpisodesList(showId, mode = 'sub') {
 // Parse tobeparsed/sourceUrls from API response into respLines
 function parseSourceLines(apiData) {
     const rawJson = JSON.stringify(apiData);
-    const hasTobeparsed = rawJson.includes('"tobeparsed"');
     let respLines = [];
 
-    if (hasTobeparsed) {
-        // Extract the tobeparsed blob from wherever it lives in the response
-        const data = apiData.data;
-        const blob = apiData.tobeparsed ||
-                     (data && data.tobeparsed) ||
-                     (data && data.episode && data.episode.tobeparsed) ||
-                     null;
+    // Helper to decrypt and extract source lines from a blob
+    const extractFromBlob = (blob) => {
+        if (!blob || blob.length < 50) return;
+        const plain = decrypt(blob);
+        if (!plain) return;
 
-        let blobValue = blob;
-        if (!blobValue) {
-            // Fallback: regex extraction from raw JSON
-            const tbpMatch = rawJson.match(/"tobeparsed":"([^"]*)"/);
-            if (tbpMatch) blobValue = tbpMatch[1];
-        }
-
-        if (blobValue) {
-            const plain = decrypt(blobValue);
-            if (plain) {
-                const parts = plain.replace(/[{}]/g, '\n').split('\n');
-                for (const part of parts) {
-                    const m = part.match(/"sourceUrl":"--([^"]*)".*"sourceName":"([^"]*)"/);
-                    if (m) {
-                        respLines.push({ sourceName: m[2], hex: m[1] });
-                    }
-                }
-            } else {
-                console.error("Decryption of tobeparsed blob failed — key may need updating");
+        // Direct video path: extract from episodeInfo.vidInfors (new format with fast4speed)
+        const vidMatch = plain.match(/"vidPath":"(\/data2\/[^"]+)"/);
+        if (vidMatch) {
+            const path = vidMatch[1];
+            if (path.includes('fast4speed.rsvp')) {
+                const cleanPath = path.replace('/data2', '');
+                const validatedUrl = cleanPath + (cleanPath.includes('?') ? '&' : '?') + 'v=1';
+                respLines.push({ sourceName: 'Yt-mp4', url: validatedUrl });
             }
         }
-    } else if (apiData.data && apiData.data.episode && apiData.data.episode.sourceUrls) {
-        // Fallback: unencrypted sourceUrls
+
+        // Hex-encoded source URLs (original format)
+        const parts = plain.replace(/[{}]/g, '\n').split('\n');
+        for (const part of parts) {
+            const m = part.match(/"sourceUrl":"--([^"]*)".*"sourceName":"([^"]*)"/);
+            if (m) {
+                respLines.push({ sourceName: m[2], hex: m[1] });
+            }
+        }
+    };
+
+    // Try each blob location independently
+    if (apiData.data && apiData.data._m && apiData.data._m.length > 10) {
+        extractFromBlob(apiData.data._m);
+    }
+    if (apiData.data && apiData.data.tobeparsed) {
+        extractFromBlob(apiData.data.tobeparsed);
+    }
+    if (apiData.tobeparsed) {
+        extractFromBlob(apiData.tobeparsed);
+    }
+    if (apiData.data && apiData.data.episode && apiData.data.episode.sourceUrls) {
         const raw = JSON.stringify(apiData.data.episode.sourceUrls);
         const cleaned = raw.replace(/\\u002F/g, '/').replace(/\\/g, '');
         const parts = cleaned.replace(/[{}]/g, '\n').split('\n');
@@ -351,7 +383,8 @@ async function getEpisodeUrl(showId, epNo, mode = 'sub', quality = 'best') {
             });
 
             const rawText = JSON.stringify(getResp.data);
-            if (rawText && rawText.includes('tobeparsed')) {
+            // Accept both old format (tobeparsed) and new format (_m in data)
+            if (rawText && (rawText.includes('tobeparsed') || rawText.includes('"_m"'))) {
                 apiData = getResp.data;
             }
         } catch (e) {
