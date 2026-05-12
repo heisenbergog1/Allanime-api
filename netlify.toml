@@ -1,8 +1,13 @@
 [build]
-  command = "npm install"
+  command = "echo 'no build needed'"
   publish = "."
   functions = "netlify/functions"
 
 [functions]
   node_bundler = "esbuild"
-  included_files = ["src/**", "node_modules/**"]
+  included_files = ["node_modules/**"]
+
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
