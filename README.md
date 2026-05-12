@@ -31,22 +31,7 @@ Or deploy via GitHub: [vercel.com/new](https://vercel.com/new)
 
 ---
 
-### Option 3: Netlify (Free, Redirect for Video)
-
-Full API support with redirect for video streaming — works with all video sources.
-
-```bash
-npm install -g netlify-cli
-netlify deploy --prod
-```
-
-Or connect via GitHub: [app.netlify.com](https://app.netlify.com)
-
-**Note:** Video endpoints (`/play`, `/download`) use 302 redirects to direct video URLs — the browser follows automatically and plays the video.
-
----
-
-### Option 4: Local / Node.js Server
+### Option 3: Local / Node.js Server
 
 Run locally on your machine.
 
@@ -169,7 +154,6 @@ Get thumbnails for multiple anime in one request.
 | Platform | Video Proxy | Bandwidth/Requests | Best For |
 |----------|------------|-------------------|----------|
 | **Vercel** | Full support | 100GB/mo | Best streaming, limited bandwidth |
-| **Netlify** | Full support | 125K requests/mo | Good streaming, request-based limits |
 | **Cloudflare Workers** | Partial (redirect for fast4speed) | 100K/day | Free, global edge, some sources blocked |
 | **Local** | Full support | Unlimited | Development, self-hosting |
 
