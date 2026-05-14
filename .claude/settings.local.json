@@ -1,13 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -s \"http://localhost:5678/search?query=Naruto\")",
-      "Bash(curl -sI \"http://localhost:5678/download?show_id=vkD8H5e7HsG2jctw9&ep_no=1&mode=sub\")",
-      "Bash(curl -sI \"http://localhost:5678/download?show_id=vkD8H5e7HsG2jctw9&ep_no=1&title=Boruto Episode 1\")",
-      "Bash(curl *)",
-      "PowerShell(Get-Process *)",
-      "Bash(Select-String -Pattern \"HTTP|content-type|content-length|accept-ranges\")",
-      "Bash(Select-String -Pattern \"README|\\\\.md\")"
+      "Bash(curl *)"
     ]
   }
 }

@@ -3,7 +3,6 @@ const ALLANIME_REFR = "https://allmanga.to";
 const ALLANIME_BASE = "allanime.day";
 const ALLANIME_API = `https://api.${ALLANIME_BASE}`;
 
-// Persisted query hash for episode embeds (from ani-cli v4.14.0)
 const EPISODE_QUERY_HASH = "d405d0edd690624b66baba3068e0edc3ac90f1597d898a1ec8db4e5c43c00fec";
 
 let ALLANIME_KEY = null;
@@ -19,13 +18,12 @@ async function getKey() {
 async function decrypt(blob) {
     try {
         const raw = Uint8Array.from(atob(blob), c => c.charCodeAt(0));
-        // Format: [version:1][IV:12][ciphertext][auth_tag:16]
         const iv = raw.slice(1, 13);
         const ctLen = raw.length - 13 - 16;
         const ciphertext = raw.slice(13, 13 + ctLen);
         const counter = new Uint8Array(16);
         counter.set(iv, 0);
-        counter[15] = 2; // matches openssl counter start
+        counter[15] = 2;
 
         const key = await getKey();
         const decrypted = await crypto.subtle.decrypt(
@@ -39,7 +37,6 @@ async function decrypt(blob) {
     }
 }
 
-// Base64url to raw bytes helper
 function b64urlDecode(b64url) {
     let padded = b64url;
     const mod = padded.length % 4;
@@ -49,7 +46,6 @@ function b64urlDecode(b64url) {
     return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
 }
 
-// Filemoon provider decryption (v4.14.0)
 async function getFilemoonLinks(providerPath) {
     const allLinks = [];
     const fetchUrl = providerPath.startsWith('http') ? providerPath : `https://${ALLANIME_BASE}${providerPath}`;
@@ -141,18 +137,42 @@ async function apiFetch(query, variables) {
     return response.json();
 }
 
+// Scrape mp4upload.com HTML page for direct video URL
+async function getMp4UploadLinks(pageUrl) {
+    const allLinks = [];
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 25000);
+        const response = await fetch(pageUrl, {
+            headers: { 'User-Agent': AGENT, 'Referer': ALLANIME_REFR },
+            redirect: 'follow',
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+        const html = await response.text();
+        const m = html.match(/(?:src|file):\s*"([^"]+\.mp4[^"]*)"/i);
+        if (m) {
+            let mp4Url = m[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+            allLinks.push({ resolution: 'Mp4', url: mp4Url, referer: 'https://www.mp4upload.com/' });
+        }
+    } catch (e) {
+        // mp4upload fetch failed
+    }
+    return allLinks;
+}
+
 // Mirrors get_links() from anime.sh
 async function getLinks(providerPath) {
     let allLinks = [];
 
     if (providerPath.includes('tools.fast4speed.rsvp')) {
-        // fast4speed.rsvp requires ?v=1 parameter for video to work
-        let validatedUrl = providerPath;
-        if (!providerPath.includes('?v=')) {
-            validatedUrl = providerPath + (providerPath.includes('?') ? '&' : '?') + 'v=1';
-        }
-        allLinks.push({ resolution: 'Yt', url: validatedUrl });
+        allLinks.push({ resolution: 'Yt', url: providerPath, needsReferer: true });
         return allLinks;
+    }
+
+    // mp4upload.com — scrape the HTML page for direct mp4 link
+    if (providerPath.includes('mp4upload.com')) {
+        return getMp4UploadLinks(providerPath);
     }
 
     const fetchUrl = providerPath.startsWith('http') ? providerPath : `https://${ALLANIME_BASE}${providerPath}`;
@@ -205,32 +225,37 @@ async function parseSourceLines(apiData) {
     const rawJson = JSON.stringify(apiData);
     let respLines = [];
 
-    // Helper to decrypt and extract source lines from a blob
+    function unescapeSource(str) {
+        return str
+            .replace(/\\u002F/g, '/')
+            .replace(new RegExp('\\\\/', 'g'), '/')
+            .replace(/\\u0026/g, '&')
+            .replace(/\\u003D/g, '=')
+            .replace(/\\/g, '');
+    }
+
     const extractFromBlob = async (blob) => {
         if (!blob || blob.length < 50) return;
         const plain = await decrypt(blob);
         if (!plain) return;
 
-        // Direct video path: extract from episodeInfo.vidInfors (new format with fast4speed)
-        const vidMatch = plain.match(/"vidPath":"(\/data2\/[^"]+)"/);
-        if (vidMatch) {
-            const path = vidMatch[1];
-            if (path.includes('fast4speed.rsvp')) {
-                const cleanPath = path.replace('/data2', '');
-                const validatedUrl = cleanPath + (cleanPath.includes('?') ? '&' : '?') + 'v=1';
-                respLines.push({ sourceName: 'Yt-mp4', url: validatedUrl });
-            }
-        }
-
-        // Hex-encoded source URLs (original format)
         const parts = plain.replace(/[{}]/g, '\n').split('\n');
         for (const part of parts) {
-            const m = part.match(/"sourceUrl":"--([^"]*)".*"sourceName":"([^"]*)"/);
-            if (m) respLines.push({ sourceName: m[2], hex: m[1] });
+            const m = part.match(/"sourceUrl":"([^"]*)".*"sourceName":"([^"]*)"/);
+            if (m) {
+                let sourceUrl = unescapeSource(m[1]);
+                const sourceName = m[2];
+                if (sourceUrl.startsWith('--')) {
+                    respLines.push({ sourceName, hex: sourceUrl.substring(2) });
+                } else if (sourceUrl.startsWith('http') || sourceUrl.startsWith('/')) {
+                    respLines.push({ sourceName, directUrl: sourceUrl });
+                } else {
+                    respLines.push({ sourceName, hex: sourceUrl });
+                }
+            }
         }
     };
 
-    // Try each blob location independently
     if (apiData.data && apiData.data._m && apiData.data._m.length > 10) {
         await extractFromBlob(apiData.data._m);
     }
@@ -242,11 +267,21 @@ async function parseSourceLines(apiData) {
     }
     if (apiData.data && apiData.data.episode && apiData.data.episode.sourceUrls) {
         const raw = JSON.stringify(apiData.data.episode.sourceUrls);
-        const cleaned = raw.replace(/\\u002F/g, '/').replace(/\\/g, '');
+        const cleaned = unescapeSource(raw);
         const parts = cleaned.replace(/[{}]/g, '\n').split('\n');
         for (const part of parts) {
-            const m = part.match(/"sourceUrl":"--([^"]*)".*"sourceName":"([^"]*)"/);
-            if (m) respLines.push({ sourceName: m[2], hex: m[1] });
+            const m = part.match(/"sourceUrl":"([^"]*)".*"sourceName":"([^"]*)"/);
+            if (m) {
+                let sourceUrl = m[1];
+                const sourceName = m[2];
+                if (sourceUrl.startsWith('--')) {
+                    respLines.push({ sourceName, hex: sourceUrl.substring(2) });
+                } else if (sourceUrl.startsWith('http') || sourceUrl.startsWith('/')) {
+                    respLines.push({ sourceName, directUrl: sourceUrl });
+                } else {
+                    respLines.push({ sourceName, hex: sourceUrl });
+                }
+            }
         }
     }
 
@@ -382,25 +417,32 @@ export async function getEpisodeUrl(showId, epNo, mode = 'sub', quality = 'best'
         let respLines = await parseSourceLines(apiData);
         if (respLines.length === 0) return null;
 
-        // Provider order: 1=Default, 2=Yt-mp4, 3=S-mp4, 4=Luf-Mp4, 5=Fm-mp4 (filemoon, new in v4.14.0)
+        // Provider order (matches fix/mp4upload-fallback):
         const providerDefs = [
             { name: 'Default', filemoon: false },
+            { name: 'Mp4', filemoon: false },
             { name: 'Yt-mp4', filemoon: false },
             { name: 'S-mp4', filemoon: false },
-            { name: 'Luf-Mp4', filemoon: false },
-            { name: 'Fm-mp4', filemoon: true }
+            { name: 'Fm-mp4', filemoon: true },
+            { name: 'Luf-Mp4', filemoon: false }
         ];
 
         const linkPromises = providerDefs.map(async (prov) => {
             const entry = respLines.find(r => r.sourceName === prov.name);
             if (!entry) return [];
-            const decodedPath = decodeProviderId(entry.hex);
-            if (!decodedPath) return [];
+
+            let resolvedPath;
+            if (entry.directUrl) {
+                resolvedPath = entry.directUrl;
+            } else if (entry.hex) {
+                resolvedPath = decodeProviderId(entry.hex);
+            }
+            if (!resolvedPath) return [];
 
             if (prov.filemoon) {
-                return getFilemoonLinks(decodedPath);
+                return getFilemoonLinks(resolvedPath);
             } else {
-                return getLinks(decodedPath);
+                return getLinks(resolvedPath);
             }
         });
 
@@ -409,6 +451,9 @@ export async function getEpisodeUrl(showId, epNo, mode = 'sub', quality = 'best'
         if (allLinks.length === 0) return null;
 
         allLinks.sort((a, b) => {
+            const aFast = a.needsReferer ? 1 : 0;
+            const bFast = b.needsReferer ? 1 : 0;
+            if (aFast !== bFast) return aFast - bFast;
             const resA = parseInt(a.resolution) || 0;
             const resB = parseInt(b.resolution) || 0;
             return resB - resA;
@@ -425,7 +470,13 @@ export async function getEpisodeUrl(showId, epNo, mode = 'sub', quality = 'best'
         }
 
         let finalUrl = selected.url.replace(/([^:])\/\//g, '$1/');
-        return finalUrl;
+        const result = { url: finalUrl };
+        if (selected.needsReferer || finalUrl.includes('tools.fast4speed.rsvp')) {
+            result.headers = { Referer: ALLANIME_REFR };
+        } else if (selected.referer) {
+            result.headers = { Referer: selected.referer };
+        }
+        return result;
     } catch (e) {
         if (e.message && e.message.startsWith('NEED_CAPTCHA')) {
             throw e;

@@ -63,9 +63,13 @@ app.get('/episode_url', async (req, res) => {
     if (!id || !epNo) return res.status(400).json({ error: "Missing show_id or ep_no" });
 
     try {
-        const url = await scraper.getEpisodeUrl(id, epNo, mode, quality);
-        if (!url) return res.status(404).json({ error: "Episode not found or URL not available" });
-        res.json({ episode_url: url, mode });
+        const result = await scraper.getEpisodeUrl(id, epNo, mode, quality);
+        if (!result) return res.status(404).json({ error: "Episode not found or URL not available" });
+        const response = { episode_url: result.url, mode };
+        if (result.headers) {
+            response.headers = result.headers;
+        }
+        res.json(response);
     } catch (e) {
         const status = e.message && e.message.startsWith('NEED_CAPTCHA') ? 503 : 500;
         res.status(status).json({ error: e.message });
@@ -84,20 +88,21 @@ app.get('/play', async (req, res) => {
     if (!id || !epNo) return res.status(400).json({ error: "Missing show_id or ep_no" });
 
     try {
-        const url = await scraper.getEpisodeUrl(id, epNo, mode, quality);
-        if (!url) return res.status(404).json({ error: "Episode not found or URL not available" });
+        const result = await scraper.getEpisodeUrl(id, epNo, mode, quality);
+        if (!result) return res.status(404).json({ error: "Episode not found or URL not available" });
 
         // Stream the video through our server with proper headers
         const range = req.headers.range;
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-            'Referer': 'https://allmanga.to'
+            'Referer': 'https://allmanga.to',
+            ...(result.headers || {})
         };
         if (range) {
             headers['Range'] = range;
         }
 
-        const videoResp = await axios.get(url, {
+        const videoResp = await axios.get(result.url, {
             headers,
             responseType: 'stream',
             timeout: 15000
@@ -148,12 +153,12 @@ app.get('/download', async (req, res) => {
 
     try {
         // Fetch anime details and episode URL in parallel for speed
-        const [details, url] = await Promise.all([
+        const [details, result] = await Promise.all([
             scraper.getAnimeDetails(id).catch(() => null),
             scraper.getEpisodeUrl(id, epNo, mode, qualityParam)
         ]);
 
-        if (!url) return res.status(404).json({ error: "Episode not found or URL not available" });
+        if (!result) return res.status(404).json({ error: "Episode not found or URL not available" });
 
         // Get anime title from details
         let animeTitle = id;
@@ -164,16 +169,17 @@ app.get('/download', async (req, res) => {
         // Determine quality from URL if possible
         let resolvedQuality = qualityParam;
         if (qualityParam === 'best' || qualityParam === 'worst') {
-            const qualityMatch = url.match(/(\d{3,4}p)/);
+            const qualityMatch = result.url.match(/(\d{3,4}p)/);
             resolvedQuality = qualityMatch ? qualityMatch[1] : '1080p';
         }
 
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-            'Referer': 'https://allmanga.to'
+            'Referer': 'https://allmanga.to',
+            ...(result.headers || {})
         };
 
-        const videoResp = await axios.get(url, {
+        const videoResp = await axios.get(result.url, {
             headers,
             responseType: 'stream',
             timeout: 15000

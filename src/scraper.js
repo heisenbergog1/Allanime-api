@@ -18,23 +18,6 @@ const axiosInstance = axios.create({
     timeout: 8000
 });
 
-// Validate video URL by checking HTTP status
-async function isValidUrl(url) {
-    try {
-        const resp = await axios.head(url, {
-            headers: {
-                'User-Agent': AGENT,
-                'Referer': ALLANIME_REFR
-            },
-            timeout: 5000,
-            maxRedirects: 3
-        });
-        // Valid if 2xx or 3xx, invalid if 4xx or 5xx
-        return resp.status < 400;
-    } catch (e) {
-        return false;
-    }
-}
 
 function decrypt(blob) {
     try {
@@ -139,22 +122,44 @@ function decodeProviderId(hex) {
     return result.replace('/clock', '/clock.json');
 }
 
+// Scrape mp4upload.com HTML page for direct video URL
+async function getMp4UploadLinks(pageUrl) {
+    const allLinks = [];
+    try {
+        const response = await axios.get(pageUrl, {
+            headers: {
+                'User-Agent': AGENT,
+                'Referer': ALLANIME_REFR
+            },
+            timeout: 25000,
+            maxRedirects: 5
+        });
+        const html = typeof response.data === 'string' ? response.data : '';
+        // Extract src: "...mp4" or file: "...mp4" pattern from the page
+        const m = html.match(/(?:src|file):\s*"([^"]+\.mp4[^"]*)"/i);
+        if (m) {
+            let mp4Url = m[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+            allLinks.push({ resolution: 'Mp4', url: mp4Url, referer: 'https://www.mp4upload.com/' });
+        }
+    } catch (e) {
+        // mp4upload fetch failed
+    }
+    return allLinks;
+}
+
 // Mirrors get_links() from anime.sh
 async function getLinks(providerPath) {
     let allLinks = [];
 
-    // If path contains tools.fast4speed.rsvp, output it directly (direct mp4 link)
+    // tools.fast4speed.rsvp URLs are direct mp4 links that need Referer header
     if (providerPath.includes('tools.fast4speed.rsvp')) {
-        // fast4speed.rsvp requires ?v=1 parameter for video to work
-        let validatedUrl = providerPath;
-        if (!providerPath.includes('?v=')) {
-            validatedUrl = providerPath + (providerPath.includes('?') ? '&' : '?') + 'v=1';
-        }
-        // Validate the full URL with v=1 parameter before returning
-        if (await isValidUrl(validatedUrl)) {
-            allLinks.push({ resolution: 'Yt', url: validatedUrl });
-        }
+        allLinks.push({ resolution: 'Yt', url: providerPath, needsReferer: true });
         return allLinks;
+    }
+
+    // mp4upload.com — scrape the HTML page for direct mp4 link
+    if (providerPath.includes('mp4upload.com')) {
+        return getMp4UploadLinks(providerPath);
     }
 
     // For non-direct URLs, fetch the provider JSON
@@ -304,29 +309,38 @@ function parseSourceLines(apiData) {
     const rawJson = JSON.stringify(apiData);
     let respLines = [];
 
+    // Unescape unicode sequences in a source line
+    function unescapeSource(str) {
+        return str
+            .replace(/\\u002F/g, '/')
+            .replace(new RegExp('\\\\/', 'g'), '/')
+            .replace(/\\u0026/g, '&')
+            .replace(/\\u003D/g, '=')
+            .replace(/\\/g, '');
+    }
+
     // Helper to decrypt and extract source lines from a blob
     const extractFromBlob = (blob) => {
         if (!blob || blob.length < 50) return;
         const plain = decrypt(blob);
         if (!plain) return;
 
-        // Direct video path: extract from episodeInfo.vidInfors (new format with fast4speed)
-        const vidMatch = plain.match(/"vidPath":"(\/data2\/[^"]+)"/);
-        if (vidMatch) {
-            const path = vidMatch[1];
-            if (path.includes('fast4speed.rsvp')) {
-                const cleanPath = path.replace('/data2', '');
-                const validatedUrl = cleanPath + (cleanPath.includes('?') ? '&' : '?') + 'v=1';
-                respLines.push({ sourceName: 'Yt-mp4', url: validatedUrl });
-            }
-        }
-
-        // Hex-encoded source URLs (original format)
         const parts = plain.replace(/[{}]/g, '\n').split('\n');
         for (const part of parts) {
-            const m = part.match(/"sourceUrl":"--([^"]*)".*"sourceName":"([^"]*)"/);
+            const m = part.match(/"sourceUrl":"([^"]*)".*"sourceName":"([^"]*)"/);
             if (m) {
-                respLines.push({ sourceName: m[2], hex: m[1] });
+                let sourceUrl = unescapeSource(m[1]);
+                const sourceName = m[2];
+                if (sourceUrl.startsWith('--')) {
+                    // Hex-encoded: strip '--' prefix, decode via mapping
+                    respLines.push({ sourceName, hex: sourceUrl.substring(2) });
+                } else if (sourceUrl.startsWith('http') || sourceUrl.startsWith('/')) {
+                    // Direct URL
+                    respLines.push({ sourceName, directUrl: sourceUrl });
+                } else {
+                    // Bare hex (no -- prefix)
+                    respLines.push({ sourceName, hex: sourceUrl });
+                }
             }
         }
     };
@@ -343,12 +357,20 @@ function parseSourceLines(apiData) {
     }
     if (apiData.data && apiData.data.episode && apiData.data.episode.sourceUrls) {
         const raw = JSON.stringify(apiData.data.episode.sourceUrls);
-        const cleaned = raw.replace(/\\u002F/g, '/').replace(/\\/g, '');
+        const cleaned = unescapeSource(raw);
         const parts = cleaned.replace(/[{}]/g, '\n').split('\n');
         for (const part of parts) {
-            const m = part.match(/"sourceUrl":"--([^"]*)".*"sourceName":"([^"]*)"/);
+            const m = part.match(/"sourceUrl":"([^"]*)".*"sourceName":"([^"]*)"/);
             if (m) {
-                respLines.push({ sourceName: m[2], hex: m[1] });
+                let sourceUrl = m[1];
+                const sourceName = m[2];
+                if (sourceUrl.startsWith('--')) {
+                    respLines.push({ sourceName, hex: sourceUrl.substring(2) });
+                } else if (sourceUrl.startsWith('http') || sourceUrl.startsWith('/')) {
+                    respLines.push({ sourceName, directUrl: sourceUrl });
+                } else {
+                    respLines.push({ sourceName, hex: sourceUrl });
+                }
             }
         }
     }
@@ -418,26 +440,36 @@ async function getEpisodeUrl(showId, epNo, mode = 'sub', quality = 'best') {
 
         if (respLines.length === 0) return null;
 
-        // Provider order: 1=Default, 2=Yt-mp4, 3=S-mp4, 4=Luf-Mp4, 5=Fm-mp4 (filemoon, new in v4.14.0)
+        // Provider order (matches fix/mp4upload-fallback):
+        // 1=Default(wixmp), 2=Mp4(mp4upload), 3=Yt-mp4(youtube/fast4speed),
+        // 4=S-mp4(sharepoint), 5=Fm-mp4(filemoon), 6=Luf-Mp4(hianime)
         const providerDefs = [
             { name: 'Default', filemoon: false },
+            { name: 'Mp4', filemoon: false },
             { name: 'Yt-mp4', filemoon: false },
             { name: 'S-mp4', filemoon: false },
-            { name: 'Luf-Mp4', filemoon: false },
-            { name: 'Fm-mp4', filemoon: true }
+            { name: 'Fm-mp4', filemoon: true },
+            { name: 'Luf-Mp4', filemoon: false }
         ];
 
         // Fetch all providers in parallel
         const linkPromises = providerDefs.map(async (prov) => {
             const entry = respLines.find(r => r.sourceName === prov.name);
             if (!entry) return [];
-            const decodedPath = decodeProviderId(entry.hex);
-            if (!decodedPath) return [];
+
+            // Resolve the provider path: direct URL or hex-decoded
+            let resolvedPath;
+            if (entry.directUrl) {
+                resolvedPath = entry.directUrl;
+            } else if (entry.hex) {
+                resolvedPath = decodeProviderId(entry.hex);
+            }
+            if (!resolvedPath) return [];
 
             if (prov.filemoon) {
-                return getFilemoonLinks(decodedPath);
+                return getFilemoonLinks(resolvedPath);
             } else {
-                return getLinks(decodedPath);
+                return getLinks(resolvedPath);
             }
         });
 
@@ -446,8 +478,12 @@ async function getEpisodeUrl(showId, epNo, mode = 'sub', quality = 'best') {
 
         if (allLinks.length === 0) return null;
 
-        // Sort numerically descending (best first)
+        // Sort: numeric resolutions descending, then deprioritize fast4speed
+        // (prefer wixmp/sharepoint/filemoon which don't need special headers)
         allLinks.sort((a, b) => {
+            const aFast = a.needsReferer ? 1 : 0;
+            const bFast = b.needsReferer ? 1 : 0;
+            if (aFast !== bFast) return aFast - bFast; // non-referer first
             const resA = parseInt(a.resolution) || 0;
             const resB = parseInt(b.resolution) || 0;
             return resB - resA;
@@ -465,7 +501,15 @@ async function getEpisodeUrl(showId, epNo, mode = 'sub', quality = 'best') {
 
         // Clean up double slashes in URL path (but not in https://)
         let finalUrl = selected.url.replace(/([^:])\/\//g, '$1/');
-        return finalUrl;
+
+        // Return object with URL and required headers
+        const result = { url: finalUrl };
+        if (selected.needsReferer || finalUrl.includes('tools.fast4speed.rsvp')) {
+            result.headers = { Referer: ALLANIME_REFR };
+        } else if (selected.referer) {
+            result.headers = { Referer: selected.referer };
+        }
+        return result;
 
     } catch (e) {
         console.error("Failed to get episode URL:", e.message);
