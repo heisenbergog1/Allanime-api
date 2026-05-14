@@ -76,6 +76,24 @@ app.get('/episode_url', async (c) => {
     }
 });
 
+// Cache resolved video URLs so seeking (Range requests) don't re-scrape
+const urlCache = new Map();
+const URL_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+function getCacheKey(id, epNo, mode, quality) {
+    return `${id}:${epNo}:${mode}:${quality}`;
+}
+
+function getCachedUrl(key) {
+    const entry = urlCache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.ts > URL_CACHE_TTL) {
+        urlCache.delete(key);
+        return null;
+    }
+    return entry.result;
+}
+
 app.get('/play', async (c) => {
     const id = c.req.query('show_id');
     const epNo = c.req.query('ep_no');
@@ -85,7 +103,14 @@ app.get('/play', async (c) => {
     if (!id || !epNo) return c.json({ error: "Missing show_id or ep_no" }, 400);
 
     try {
-        const result = await scraper.getEpisodeUrl(id, epNo, mode, quality);
+        const cacheKey = getCacheKey(id, epNo, mode, quality);
+        let result = getCachedUrl(cacheKey);
+        if (!result) {
+            result = await scraper.getEpisodeUrl(id, epNo, mode, quality);
+            if (result) {
+                urlCache.set(cacheKey, { result, ts: Date.now() });
+            }
+        }
         if (!result) return c.json({ error: "Episode not found or URL not available" }, 404);
 
         const url = result.url;
@@ -102,6 +127,8 @@ app.get('/play', async (c) => {
         const videoResp = await fetch(url, { headers, redirect: 'follow' });
 
         if (videoResp.status >= 400) {
+            // URL might be stale — clear cache and retry once
+            urlCache.delete(cacheKey);
             return c.json({ error: `Video source returned ${videoResp.status}` }, 502);
         }
 
@@ -109,14 +136,12 @@ app.get('/play', async (c) => {
         respHeaders.set('Content-Type', 'video/mp4');
         respHeaders.set('Content-Disposition', 'inline');
         respHeaders.set('Access-Control-Allow-Origin', '*');
+        respHeaders.set('Accept-Ranges', 'bytes');
         if (videoResp.headers.get('content-length')) {
             respHeaders.set('Content-Length', videoResp.headers.get('content-length'));
         }
         if (videoResp.headers.get('content-range')) {
             respHeaders.set('Content-Range', videoResp.headers.get('content-range'));
-        }
-        if (videoResp.headers.get('accept-ranges')) {
-            respHeaders.set('Accept-Ranges', videoResp.headers.get('accept-ranges'));
         }
         respHeaders.set('Cache-Control', 'no-store');
 
