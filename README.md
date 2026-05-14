@@ -6,7 +6,7 @@ A fast, lightweight Node.js API to search anime, get episode lists, and stream v
 
 ### Option 1: Cloudflare Workers (Free, Serverless)
 
-Deploy to Cloudflare's edge network. **Note:** Some video sources (fast4speed) may return 403 when proxied through CF — these will redirect to direct URL instead.
+Deploy to Cloudflare's edge network. 
 
 ```bash
 cd worker
@@ -43,19 +43,6 @@ pm2 start src/index.js --name anime-api
 ```
 
 Then configure nginx with your domain + Let's Encrypt SSL.
-
----
-
-### Option 4: Local / Node.js Server
-
-Run locally on your machine.
-
-```bash
-npm install
-npm start
-```
-
-Server runs on `http://localhost:5678`. Set `PORT` in `.env` to change.
 
 ---
 
