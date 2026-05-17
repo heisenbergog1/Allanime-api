@@ -117,8 +117,8 @@ app.get('/play', async (c) => {
 
         const range = c.req.header('Range');
         const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-            'Referer': 'https://allmanga.to',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0',
+            'Referer': 'https://youtu-chan.com',
             'Accept': '*/*',
             ...(result.headers || {})
         };
@@ -188,8 +188,8 @@ app.get('/download', async (c) => {
             : `${animeTitle}_${season}E${epNo}_${resolvedQuality}.mp4`;
 
         const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-            'Referer': 'https://allmanga.to',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0',
+            'Referer': 'https://youtu-chan.com',
             'Accept': '*/*',
             ...(result.headers || {})
         };

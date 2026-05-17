@@ -1,5 +1,5 @@
-const AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0";
-const ALLANIME_REFR = "https://allmanga.to";
+const AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0";
+const ALLANIME_REFR = "https://youtu-chan.com";
 const ALLANIME_BASE = "allanime.day";
 const ALLANIME_API = `https://api.${ALLANIME_BASE}`;
 
@@ -289,8 +289,8 @@ async function parseSourceLines(apiData) {
 }
 
 export async function searchAnime(query) {
-    const searchGql = `query($search: SearchInput $limit: Int $page: Int $countryOrigin: VaildCountryOriginEnumType) {
-        shows( search: $search limit: $limit page: $page countryOrigin: $countryOrigin ) {
+    const searchGql = `query($search: SearchInput $limit: Int $page: Int $translationType: VaildTranslationTypeEnumType $countryOrigin: VaildCountryOriginEnumType) {
+        shows( search: $search limit: $limit page: $page translationType: $translationType countryOrigin: $countryOrigin ) {
             edges {
                 _id
                 name
@@ -305,7 +305,7 @@ export async function searchAnime(query) {
     try {
         const data = await apiFetch(searchGql, {
             search: { allowAdult: false, allowUnknown: false, query },
-            limit: 40, page: 1, countryOrigin: "ALL"
+            limit: 40, page: 1, translationType: "sub", countryOrigin: "ALL"
         });
 
         const shows = data.data.shows.edges;
@@ -316,6 +316,7 @@ export async function searchAnime(query) {
             episodes_dub: parseInt(show.availableEpisodes.dub) || 0
         }));
     } catch (e) {
+        console.error('[worker-search] API error:', e.message);
         return [];
     }
 }
@@ -384,7 +385,7 @@ export async function getEpisodeUrl(showId, epNo, mode = 'sub', quality = 'best'
                 headers: {
                     'User-Agent': AGENT,
                     'Referer': ALLANIME_REFR,
-                    'Origin': 'https://youtu-chan.com'
+                    'Origin': ALLANIME_REFR
                 },
                 signal: controller.signal
             });

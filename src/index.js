@@ -94,8 +94,8 @@ app.get('/play', async (req, res) => {
         // Stream the video through our server with proper headers
         const range = req.headers.range;
         const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-            'Referer': 'https://allmanga.to',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0',
+            'Referer': 'https://youtu-chan.com',
             ...(result.headers || {})
         };
         if (range) {
@@ -174,8 +174,8 @@ app.get('/download', async (req, res) => {
         }
 
         const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-            'Referer': 'https://allmanga.to',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0',
+            'Referer': 'https://youtu-chan.com',
             ...(result.headers || {})
         };
 

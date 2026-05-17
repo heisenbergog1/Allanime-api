@@ -1,8 +1,8 @@
 const axios = require('axios');
 const crypto = require('crypto');
 
-const AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0";
-const ALLANIME_REFR = "https://allmanga.to";
+const AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0";
+const ALLANIME_REFR = "https://youtu-chan.com";
 const ALLANIME_BASE = "allanime.day";
 const ALLANIME_API = `https://api.${ALLANIME_BASE}`;
 const ALLANIME_KEY = crypto.createHash('sha256').update('Xot36i3lK3:v1').digest('hex');
@@ -204,8 +204,8 @@ async function getLinks(providerPath) {
 }
 
 async function searchAnime(query) {
-    const searchGql = `query($search: SearchInput $limit: Int $page: Int $countryOrigin: VaildCountryOriginEnumType) {
-        shows( search: $search limit: $limit page: $page countryOrigin: $countryOrigin ) {
+    const searchGql = `query($search: SearchInput $limit: Int $page: Int $translationType: VaildTranslationTypeEnumType $countryOrigin: VaildCountryOriginEnumType) {
+        shows( search: $search limit: $limit page: $page translationType: $translationType countryOrigin: $countryOrigin ) {
             edges {
                 _id
                 name
@@ -227,6 +227,7 @@ async function searchAnime(query) {
                 },
                 limit: 40,
                 page: 1,
+                translationType: "sub",
                 countryOrigin: "ALL"
             },
             query: searchGql
@@ -240,6 +241,7 @@ async function searchAnime(query) {
             episodes_dub: parseInt(show.availableEpisodes.dub) || 0
         }));
     } catch (e) {
+        console.error('[search] API error:', e.response?.status, e.response?.data || e.message);
         return [];
     }
 }
@@ -399,7 +401,7 @@ async function getEpisodeUrl(showId, epNo, mode = 'sub', quality = 'best') {
                 headers: {
                     'User-Agent': AGENT,
                     'Referer': ALLANIME_REFR,
-                    'Origin': 'https://youtu-chan.com'
+                    'Origin': ALLANIME_REFR
                 },
                 timeout: 5000
             });
