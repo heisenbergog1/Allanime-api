@@ -304,6 +304,20 @@
     font-weight: 700;
   }
 
+
+  .extra-btns {
+    display: -webkit-box;
+    display: -webkit-flex;
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .extra-btns .btn {
+    flex: 1;
+    text-align: center;
+    text-decoration: none;
+    display: block;
+  }
   .ep-nav {
     display: flex;
     gap: 8px;
@@ -497,7 +511,7 @@ var state = {
   currentEpisodes: [],
   currentMode: 'sub',
   currentEpIndex: 0,
-  currentQuality: 'best',
+  currentQuality: '720p',
   prevScreen: 'home'
 };
 
@@ -685,35 +699,58 @@ function renderEpisodeGrid(eps) {
 }
 
 // ── PLAYER ─────────────────────────────────────────────
+function buildStreamUrl(ep, quality) {
+  return state.apiUrl + '/play?show_id=' + encodeURIComponent(state.currentAnime.id)
+    + '&ep_no=' + encodeURIComponent(ep)
+    + '&mode=' + state.currentMode
+    + '&quality=' + quality;
+}
+
+function buildDownloadUrl(ep, quality) {
+  return state.apiUrl + '/download?show_id=' + encodeURIComponent(state.currentAnime.id)
+    + '&ep_no=' + encodeURIComponent(ep)
+    + '&mode=' + state.currentMode
+    + '&quality=' + quality;
+}
+
+function killVideo() {
+  var old = document.getElementById('video-player');
+  if (old) {
+    old.pause();
+    old.src = '';
+    old.load();
+    if (old.parentNode) old.parentNode.removeChild(old);
+  }
+}
+
 function playEpisode(index) {
   state.currentEpIndex = index;
   showScreen('player');
   var ep = state.currentEpisodes[index];
   var c = document.getElementById('player-container');
-
-  var streamUrl = state.apiUrl + '/play?show_id=' + encodeURIComponent(state.currentAnime.id)
-    + '&ep_no=' + encodeURIComponent(ep)
-    + '&mode=' + state.currentMode
-    + '&quality=' + state.currentQuality;
+  var streamUrl = buildStreamUrl(ep, state.currentQuality);
+  var downloadUrl = buildDownloadUrl(ep, state.currentQuality);
 
   var hasPrev = index > 0;
   var hasNext = index < state.currentEpisodes.length - 1;
   var modeBadge = '<span class="badge ' + state.currentMode + '">' + state.currentMode.toUpperCase() + '</span>';
 
-  c.innerHTML = '<div class="player-wrap">'
-    + '<video id="video-player" controls preload="auto" playsinline webkit-playsinline x-webkit-airplay="allow">'
-    + '<source src="' + streamUrl + '" type="video/mp4">'
-    + 'Your browser does not support video playback.'
-    + '</video>'
-    + '</div>'
+  killVideo();
+
+  c.innerHTML = '<div class="player-wrap" id="player-wrap"></div>'
     + '<div class="player-info">'
     + '<div class="now-playing-label">Now Playing ' + modeBadge + '</div>'
     + '<div class="now-playing-title">' + esc(state.currentAnime.title) + ' - Episode ' + esc(String(ep)) + '</div>'
     + '</div>'
+    + '<div class="section-label" style="margin-bottom:8px">Quality (720p recommended for iPad 2)</div>'
     + '<div class="quality-row">'
-    + ['best','1080p','720p','480p','360p'].map(function(q) {
+    + ['720p','480p','360p','1080p','best'].map(function(q) {
         return '<button class="quality-btn' + (state.currentQuality === q ? ' active' : '') + '" onclick="setQuality(\'' + q + '\')">' + q + '</button>';
       }).join('')
+    + '</div>'
+    + '<div class="extra-btns">'
+    + '<a class="btn secondary" href="' + streamUrl + '" target="_blank">Open in new tab</a>'
+    + '<a class="btn secondary" href="' + downloadUrl + '" download>Download</a>'
     + '</div>'
     + '<div class="ep-nav">'
     + '<button class="btn secondary" ' + (hasPrev ? 'onclick="playEpisode(' + (index-1) + ')"' : 'disabled') + '>&larr; Prev</button>'
@@ -721,10 +758,21 @@ function playEpisode(index) {
     + '<button class="btn" ' + (hasNext ? 'onclick="playEpisode(' + (index+1) + ')"' : 'disabled style="opacity:0.4"') + '>Next &rarr;</button>'
     + '</div>';
 
-  setTimeout(function() {
-    var v = document.getElementById('video-player');
-    if (v) { v.load(); v.play(); }
-  }, 400);
+  var wrap = document.getElementById('player-wrap');
+  var vid = document.createElement('video');
+  vid.id = 'video-player';
+  vid.controls = true;
+  vid.preload = 'auto';
+  vid.setAttribute('playsinline', '');
+  vid.setAttribute('webkit-playsinline', '');
+  vid.setAttribute('x-webkit-airplay', 'allow');
+  var src = document.createElement('source');
+  src.src = streamUrl;
+  src.type = 'video/mp4';
+  vid.appendChild(src);
+  wrap.appendChild(vid);
+  vid.load();
+  setTimeout(function() { vid.play(); }, 300);
 }
 
 function setQuality(q) {
