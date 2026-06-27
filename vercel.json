@@ -12,13 +12,44 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/search(.*)",
       "dest": "/src/index.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type"
-      }
+      "headers": { "Access-Control-Allow-Origin": "*" }
+    },
+    {
+      "src": "/anime(.*)",
+      "dest": "/src/index.js",
+      "headers": { "Access-Control-Allow-Origin": "*" }
+    },
+    {
+      "src": "/episodes(.*)",
+      "dest": "/src/index.js",
+      "headers": { "Access-Control-Allow-Origin": "*" }
+    },
+    {
+      "src": "/episode_url(.*)",
+      "dest": "/src/index.js",
+      "headers": { "Access-Control-Allow-Origin": "*" }
+    },
+    {
+      "src": "/episode_info(.*)",
+      "dest": "/src/index.js",
+      "headers": { "Access-Control-Allow-Origin": "*" }
+    },
+    {
+      "src": "/play(.*)",
+      "dest": "/src/index.js",
+      "headers": { "Access-Control-Allow-Origin": "*" }
+    },
+    {
+      "src": "/download(.*)",
+      "dest": "/src/index.js",
+      "headers": { "Access-Control-Allow-Origin": "*" }
+    },
+    {
+      "src": "/thumbnails(.*)",
+      "dest": "/src/index.js",
+      "headers": { "Access-Control-Allow-Origin": "*" }
     },
     {
       "src": "/(.*)",
