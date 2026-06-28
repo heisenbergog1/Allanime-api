@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="https://fav.farm/🎮">
 <title>AniStream</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');
@@ -683,13 +684,13 @@ function playEpisode(index) {
   vid.setAttribute('playsinline', '');
   vid.setAttribute('webkit-playsinline', '');
   vid.setAttribute('x-webkit-airplay', 'allow');
-  vid.preload = 'none';
-  vid.src = streamUrl;
+  vid.preload = 'metadata';
   // Insert before buf-overlay
   player.insertBefore(vid, document.getElementById('buf-overlay'));
 
   // Video events
   vid.addEventListener('waiting', function() { setBuf(true, 'Buffering...'); });
+  vid.addEventListener('stalled', function() { setBuf(true, 'Buffering...'); });
   vid.addEventListener('playing', function() { setBuf(false); updatePlayBtn(); });
   vid.addEventListener('pause', function() { updatePlayBtn(); });
   vid.addEventListener('ended', function() { updatePlayBtn(); if (index < state.currentEpisodes.length - 1) nextEp(); });
@@ -697,6 +698,11 @@ function playEpisode(index) {
   vid.addEventListener('progress', updateBuffer);
   vid.addEventListener('durationchange', updateProgress);
   vid.addEventListener('canplay', function() { setBuf(false); });
+  vid.addEventListener('error', function() { setBuf(true, 'Error loading video'); });
+
+  // Set src AFTER attaching events
+  vid.src = streamUrl;
+  vid.load();
 
   // Touch controls on player
   setupPlayerTouch(player, vid);
@@ -716,8 +722,38 @@ function playEpisode(index) {
     applyZoom();
   };
 
-  vid.play();
+  // iOS 9 needs explicit user-triggered play
+  // Show a big tap-to-play button instead of autoplay
+  showTapToPlay();
   showControls();
+}
+
+function showTapToPlay() {
+  var o = document.getElementById('buf-overlay');
+  o.className = '';
+  document.getElementById('buf-label').textContent = '';
+  // Replace spinner with big play button
+  var spinner = o.querySelector('.spinner');
+  if (spinner) spinner.style.display = 'none';
+  var existing = document.getElementById('tap-play-btn');
+  if (!existing) {
+    var btn = document.createElement('button');
+    btn.id = 'tap-play-btn';
+    btn.innerHTML = '&#9654;';
+    btn.style.cssText = 'background:rgba(124,92,252,0.9);border:none;border-radius:50%;width:72px;height:72px;font-size:28px;color:#fff;cursor:pointer;-webkit-appearance:none;';
+    btn.addEventListener('touchend', function(e) {
+      e.preventDefault();
+      var v = document.getElementById('vid');
+      if (v) {
+        v.play();
+        setBuf(true, 'Buffering...');
+        var sp = o.querySelector('.spinner');
+        if (sp) sp.style.display = '';
+        if (btn.parentNode) btn.parentNode.removeChild(btn);
+      }
+    }, false);
+    o.appendChild(btn);
+  }
 }
 
 function setBuf(show, msg) {
