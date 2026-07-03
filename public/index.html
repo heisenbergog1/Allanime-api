@@ -337,6 +337,11 @@ document.getElementById('home-search').addEventListener('keydown', function(e) {
 if (state.apiUrl) pingApi();
 window.addEventListener('orientationchange', function() { setTimeout(function() { if (state.isFullscreen) resizeFullscreen(); }, 250); });
 
+// Set up player touch, scrub, zoom ONCE — they read vid from DOM each time
+initPlayerTouch();
+initScrub();
+initZoomSlider();
+
 // ── XHR ───────────────────────────────────────────────
 function pingApi() {
   var dot = document.getElementById('status-dot');
@@ -605,14 +610,9 @@ function startVideo(streamUrl) {
     document.getElementById('buf-label').textContent = 'Error loading video';
   });
 
-  setupPlayerTouch(player, vid);
-  setupScrub(vid);
-  setupZoomSlider();
-
   vid.src = streamUrl;
   vid.load();
   vid.play();
-  // Always show controls when video starts
   showControls();
 }
 
@@ -657,19 +657,20 @@ function showControls() {
 }
 function clearCtrlTimeout() { if (state.ctrlTimeout) { clearTimeout(state.ctrlTimeout); state.ctrlTimeout = null; } }
 
-// ── TOUCH ─────────────────────────────────────────────
-function setupPlayerTouch(player, vid) {
+// ── TOUCH (set up once on page load) ─────────────────
+function initPlayerTouch() {
+  var player = document.getElementById('custom-player');
   player.addEventListener('touchstart', function(e) {
     var bar = document.getElementById('ctrl-bar');
     var prog = document.getElementById('prog-wrap');
     var t = e.target;
-    // If touching controls, don't intercept
     if (nodeContains(bar, t) || nodeContains(prog, t)) return;
+    // Ignore if no video loaded yet
+    if (!document.getElementById('vid')) return;
 
     var now = Date.now();
     var diff = now - state.lastTap;
     if (diff < 280 && diff > 30) {
-      // Double tap
       clearTimeout(state.tapTimer);
       state.lastTap = 0;
       var touch = e.touches[0];
@@ -694,19 +695,20 @@ function flashSkip(side) {
   setTimeout(function() { el.className = 'skip-flash ' + side; }, 500);
 }
 
-// ── SCRUB ─────────────────────────────────────────────
-function setupScrub(vid) {
+// ── SCRUB (set up once on page load) ─────────────────
+function initScrub() {
   var wrap = document.getElementById('prog-wrap');
   wrap.addEventListener('touchstart', function(e) {
+    if (!document.getElementById('vid')) return;
     state.scrubbing = true;
     wrap.className = 'prog-wrap scrubbing';
     showControls();
-    doScrub(e.touches[0].clientX, wrap, vid);
+    doScrub(e.touches[0].clientX, wrap);
     e.stopPropagation(); e.preventDefault();
   }, false);
   wrap.addEventListener('touchmove', function(e) {
     if (!state.scrubbing) return;
-    doScrub(e.touches[0].clientX, wrap, vid);
+    doScrub(e.touches[0].clientX, wrap);
     e.stopPropagation(); e.preventDefault();
   }, false);
   wrap.addEventListener('touchend', function(e) {
@@ -715,7 +717,8 @@ function setupScrub(vid) {
     e.stopPropagation();
   }, false);
 }
-function doScrub(clientX, wrap, vid) {
+function doScrub(clientX, wrap) {
+  var vid = document.getElementById('vid');
   var rect = wrap.getBoundingClientRect();
   var pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
   if (vid && vid.duration) {
@@ -750,8 +753,8 @@ function buildQualityPanel() {
 function toggleQualityPanel() { var p = document.getElementById('quality-panel'); p.className = p.className === 'show' ? '' : 'show'; document.getElementById('zoom-panel').className = ''; showControls(); }
 function setQuality(q) { state.currentQuality = q; document.getElementById('quality-panel').className = ''; buildQualityPanel(); playEpisode(state.currentEpIndex, true); }
 
-// ── ZOOM ──────────────────────────────────────────────
-function setupZoomSlider() {
+// ── ZOOM (set up once on page load) ──────────────────
+function initZoomSlider() {
   var slider = document.getElementById('zoom-slider');
   function applyFromSlider() {
     state.zoomLevel = parseInt(slider.value);
