@@ -469,13 +469,13 @@ function buildUrl(type, ep, quality) {
 function killVideo() {
   var v = document.getElementById('vid');
   if (v) {
-    v.pause();
-    // Remove all event listeners by cloning (fixes audio loss on iOS)
-    var clone = v.cloneNode(false);
-    if (v.parentNode) v.parentNode.replaceChild(clone, v);
-    clone.removeAttribute('src');
-    clone.load();
-    if (clone.parentNode) clone.parentNode.removeChild(clone);
+    try {
+      v.pause();
+      v.setAttribute('src', '');
+      v.removeAttribute('src');
+      v.load();
+    } catch(e) {}
+    if (v.parentNode) v.parentNode.removeChild(v);
   }
   state.playing = false;
   clearCtrlTimeout();
