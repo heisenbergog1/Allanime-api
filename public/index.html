@@ -468,12 +468,20 @@ function buildUrl(type, ep, quality) {
 }
 function killVideo() {
   var v = document.getElementById('vid');
-  if (v) { v.pause(); v.src = ''; v.load(); if (v.parentNode) v.parentNode.removeChild(v); }
+  if (v) {
+    v.pause();
+    // Remove all event listeners by cloning (fixes audio loss on iOS)
+    var clone = v.cloneNode(false);
+    if (v.parentNode) v.parentNode.replaceChild(clone, v);
+    clone.removeAttribute('src');
+    clone.load();
+    if (clone.parentNode) clone.parentNode.removeChild(clone);
+  }
   state.playing = false;
   clearCtrlTimeout();
 }
 
-function playEpisode(index) {
+function playEpisode(index, autoStart) {
   state.currentEpIndex = index;
   var ep = state.currentEpisodes[index];
   var streamUrl = buildUrl('play', ep, state.currentQuality);
@@ -499,9 +507,25 @@ function playEpisode(index) {
   document.getElementById('prog-buf').style.width = '0';
   setPlayIcon(false);
 
-  // Show tap-to-play (iOS 9 requires user gesture)
-  showTapToPlay(streamUrl);
+  // If auto-advancing (next/prev ep or quality change), start immediately
+  // since we're already inside a user gesture context chain
+  if (autoStart) {
+    showBufSpinner('Loading next episode...');
+    startVideo(streamUrl);
+  } else {
+    // First time - iOS 9 needs explicit tap
+    showTapToPlay(streamUrl);
+  }
   showControls();
+}
+
+function showBufSpinner(msg) {
+  var o = document.getElementById('buf-overlay');
+  o.className = '';
+  var old = document.getElementById('tap-play-btn');
+  if (old && old.parentNode) old.parentNode.removeChild(old);
+  document.getElementById('buf-spinner').style.display = '';
+  document.getElementById('buf-label').textContent = msg || 'Loading...';
 }
 
 function showTapToPlay(streamUrl) {
@@ -571,7 +595,7 @@ function startVideo(streamUrl) {
   vid.addEventListener('pause', function() { state.playing = false; setPlayIcon(false); });
   vid.addEventListener('ended', function() {
     state.playing = false; setPlayIcon(false);
-    if (state.currentEpIndex < state.currentEpisodes.length - 1) nextEp();
+    if (state.currentEpIndex < state.currentEpisodes.length - 1) playEpisode(state.currentEpIndex + 1, true);
   });
   vid.addEventListener('timeupdate', updateProgress);
   vid.addEventListener('progress', updateBuffer);
@@ -588,6 +612,8 @@ function startVideo(streamUrl) {
   vid.src = streamUrl;
   vid.load();
   vid.play();
+  // Always show controls when video starts
+  showControls();
 }
 
 function hideBuf() {
@@ -708,8 +734,8 @@ function togglePlay() {
 }
 function skipBack() { var v = document.getElementById('vid'); if (v) v.currentTime = Math.max(0, v.currentTime - 10); showControls(); }
 function skipFwd() { var v = document.getElementById('vid'); if (v) v.currentTime = Math.min(v.duration || 0, v.currentTime + 10); showControls(); }
-function prevEp() { if (state.currentEpIndex > 0) playEpisode(state.currentEpIndex - 1); }
-function nextEp() { if (state.currentEpIndex < state.currentEpisodes.length - 1) playEpisode(state.currentEpIndex + 1); }
+function prevEp() { if (state.currentEpIndex > 0) playEpisode(state.currentEpIndex - 1, true); }
+function nextEp() { if (state.currentEpIndex < state.currentEpisodes.length - 1) playEpisode(state.currentEpIndex + 1, true); }
 
 // ── QUALITY ───────────────────────────────────────────
 function buildQualityPanel() {
@@ -722,7 +748,7 @@ function buildQualityPanel() {
   p.innerHTML = html;
 }
 function toggleQualityPanel() { var p = document.getElementById('quality-panel'); p.className = p.className === 'show' ? '' : 'show'; document.getElementById('zoom-panel').className = ''; showControls(); }
-function setQuality(q) { state.currentQuality = q; document.getElementById('quality-panel').className = ''; buildQualityPanel(); playEpisode(state.currentEpIndex); }
+function setQuality(q) { state.currentQuality = q; document.getElementById('quality-panel').className = ''; buildQualityPanel(); playEpisode(state.currentEpIndex, true); }
 
 // ── ZOOM ──────────────────────────────────────────────
 function setupZoomSlider() {
