@@ -700,18 +700,8 @@ function playEpisode(index, autoStart) {
     document.getElementById('link-tab').href = directUrl;
     document.getElementById('link-dl').href = downloadUrl;
 
-    if (isIOS()) {
-      if (isWixstatic && !hasHeaders) {
-        // Direct URL works on iOS for Wixstatic
-        showIOSPlayer(directUrl, ep);
-      } else {
-        // Need proxy for URLs requiring headers - use /play
-        showIOSPlayer(buildUrl('play', ep, state.currentQuality), ep);
-      }
-    } else {
-      if (autoStart) { showBufSpinner('Buffering...'); startVideo(streamUrl); }
-      else { showTapToPlay(streamUrl); }
-    }
+    if (autoStart) { showBufSpinner('Buffering...'); startVideo(streamUrl); }
+    else { showTapToPlay(streamUrl); }
   });
 }
 
@@ -740,34 +730,6 @@ function showTapToPlay(streamUrl) {
   o.appendChild(btn);
 }
 
-function showIOSPlayer(streamUrl, ep) {
-  // On iOS: show a clean tap-to-open screen instead of embedded player
-  var o = document.getElementById('buf-overlay');
-  o.className = '';
-  var old = document.getElementById('tap-play-btn');
-  if (old && old.parentNode) old.parentNode.removeChild(old);
-  document.getElementById('buf-spinner').style.display = 'none';
-  document.getElementById('buf-label').textContent = '';
-
-  // Big open button
-  var btn = document.createElement('button');
-  btn.id = 'tap-play-btn';
-  btn.style.cssText = 'background:none;border:none;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;gap:14px;cursor:pointer;-webkit-appearance:none;color:#fff;padding:20px';
-  btn.innerHTML = '<div style="background:rgba(124,92,252,.92);border-radius:50%;width:80px;height:80px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center">'
-    + '<svg style="width:32px;height:32px" viewBox="0 0 24 24"><use xlink:href="#ic-play"/></svg></div>'
-    + '<div style="font-size:14px;font-weight:600;font-family:Space Grotesk,sans-serif">Tap to open in Safari</div>'
-    + '<div style="font-size:12px;color:rgba(255,255,255,.6);font-family:Space Grotesk,sans-serif">Episode ' + esc(String(ep)) + ' &bull; ' + state.currentQuality + '</div>';
-
-  function openInSafari(e) {
-    e.preventDefault();
-    // Direct navigation — most reliable on iOS 9
-    window.location.href = streamUrl;
-  }
-  btn.addEventListener('touchend', openInSafari, false);
-  btn.addEventListener('click', openInSafari, false);
-  o.appendChild(btn);
-  showControls();
-}
 
 function startVideo(streamUrl) {
   var btn = document.getElementById('tap-play-btn');
@@ -954,7 +916,7 @@ function resizeFullscreen() {
 // ── UTILS ─────────────────────────────────────────────
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escId(s) { return String(s).replace(/[^a-zA-Z0-9_-]/g,''); }
-function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent); }
+
 </script>
 </body>
 </html>
