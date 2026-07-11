@@ -888,8 +888,7 @@ function resizeFullscreen() {
   if (v&&state.isFullscreen) { v.style.width=window.innerWidth+'px'; v.style.height=window.innerHeight+'px'; }
 }
 
-// ── UTILS
-// V1 ─────────────────────────────────────────────
+// ── UTILS ─────────────────────────────────────────────
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escId(s) { return String(s).replace(/[^a-zA-Z0-9_-]/g,''); }
 
