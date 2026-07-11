@@ -682,13 +682,18 @@ function playEpisode(index, autoStart) {
     + '&quality=' + state.currentQuality;
 
   api(episodeUrlPath, function(err, data) {
-    var streamUrl = (data && data.episode_url) ? data.episode_url : buildUrl('play', ep, state.currentQuality);
+    if (err || !data || !data.episode_url) {
+      // API failed - show error
+      document.getElementById('buf-spinner').style.display = 'none';
+      document.getElementById('buf-label').textContent = 'Error loading video';
+      return;
+    }
+    var streamUrl = data.episode_url;
     var downloadUrl = buildUrl('download', ep, state.currentQuality);
     document.getElementById('link-tab').href = streamUrl;
     document.getElementById('link-dl').href = downloadUrl;
 
     if (isIOS()) {
-      // On iOS open direct URL in Safari — avoids CORS and codec issues
       showIOSPlayer(streamUrl, ep);
     } else {
       if (autoStart) { showBufSpinner('Buffering...'); startVideo(streamUrl); }
@@ -742,7 +747,14 @@ function showIOSPlayer(streamUrl, ep) {
 
   function openInSafari(e) {
     e.preventDefault();
-    window.location.href = streamUrl;
+    // Open in new tab so user can come back to AniStream
+    var a = document.createElement('a');
+    a.href = streamUrl;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function() { if (a.parentNode) a.parentNode.removeChild(a); }, 100);
   }
   btn.addEventListener('touchend', openInSafari, false);
   btn.addEventListener('click', openInSafari, false);
