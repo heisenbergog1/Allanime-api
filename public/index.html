@@ -671,38 +671,13 @@ function playEpisode(index, autoStart) {
   document.getElementById('prog-buf').style.width = '0';
   setPlayIcon(false);
 
-  // Show loading state
-  showBufSpinner('Getting stream...');
+  var streamUrl = buildUrl('play', ep, state.currentQuality);
+  var downloadUrl = buildUrl('download', ep, state.currentQuality);
+  document.getElementById('link-tab').href = streamUrl;
+  document.getElementById('link-dl').href = downloadUrl;
+  if (autoStart) { showBufSpinner('Buffering...'); startVideo(streamUrl); }
+  else { showTapToPlay(streamUrl); }
   showControls();
-
-  // Fetch direct URL from /episode_url endpoint
-  var episodeUrlPath = '/episode_url?show_id=' + encodeURIComponent(state.currentAnime.id)
-    + '&ep_no=' + encodeURIComponent(ep)
-    + '&mode=' + state.currentMode
-    + '&quality=' + state.currentQuality;
-
-  api(episodeUrlPath, function(err, data) {
-    if (err || !data || !data.episode_url) {
-      document.getElementById('buf-spinner').style.display = 'none';
-      document.getElementById('buf-label').textContent = 'Error loading video';
-      return;
-    }
-
-    var directUrl = data.episode_url;
-    var hasHeaders = data.headers && Object.keys(data.headers).length > 0;
-    var isWixstatic = directUrl.indexOf('wixstatic.com') !== -1;
-
-    // Use direct URL only for Wixstatic (no headers needed)
-    // For everything else use /play proxy which adds required headers
-    var streamUrl = (isWixstatic && !hasHeaders) ? directUrl : buildUrl('play', ep, state.currentQuality);
-    var downloadUrl = buildUrl('download', ep, state.currentQuality);
-
-    document.getElementById('link-tab').href = directUrl;
-    document.getElementById('link-dl').href = downloadUrl;
-
-    if (autoStart) { showBufSpinner('Buffering...'); startVideo(streamUrl); }
-    else { showTapToPlay(streamUrl); }
-  });
 }
 
 function showBufSpinner(msg) {
