@@ -683,18 +683,31 @@ function playEpisode(index, autoStart) {
 
   api(episodeUrlPath, function(err, data) {
     if (err || !data || !data.episode_url) {
-      // API failed - show error
       document.getElementById('buf-spinner').style.display = 'none';
       document.getElementById('buf-label').textContent = 'Error loading video';
       return;
     }
-    var streamUrl = data.episode_url;
+
+    var directUrl = data.episode_url;
+    var hasHeaders = data.headers && Object.keys(data.headers).length > 0;
+    var isWixstatic = directUrl.indexOf('wixstatic.com') !== -1;
+
+    // Use direct URL only for Wixstatic (no headers needed)
+    // For everything else use /play proxy which adds required headers
+    var streamUrl = (isWixstatic && !hasHeaders) ? directUrl : buildUrl('play', ep, state.currentQuality);
     var downloadUrl = buildUrl('download', ep, state.currentQuality);
-    document.getElementById('link-tab').href = streamUrl;
+
+    document.getElementById('link-tab').href = directUrl;
     document.getElementById('link-dl').href = downloadUrl;
 
     if (isIOS()) {
-      showIOSPlayer(streamUrl, ep);
+      if (isWixstatic && !hasHeaders) {
+        // Direct URL works on iOS for Wixstatic
+        showIOSPlayer(directUrl, ep);
+      } else {
+        // Need proxy for URLs requiring headers - use /play
+        showIOSPlayer(buildUrl('play', ep, state.currentQuality), ep);
+      }
     } else {
       if (autoStart) { showBufSpinner('Buffering...'); startVideo(streamUrl); }
       else { showTapToPlay(streamUrl); }
@@ -747,14 +760,8 @@ function showIOSPlayer(streamUrl, ep) {
 
   function openInSafari(e) {
     e.preventDefault();
-    // Open in new tab so user can come back to AniStream
-    var a = document.createElement('a');
-    a.href = streamUrl;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function() { if (a.parentNode) a.parentNode.removeChild(a); }, 100);
+    // Direct navigation — most reliable on iOS 9
+    window.location.href = streamUrl;
   }
   btn.addEventListener('touchend', openInSafari, false);
   btn.addEventListener('click', openInSafari, false);
