@@ -574,15 +574,15 @@ function startVideo(streamUrl) {
   vid.setAttribute('preload', 'auto');
   vid.setAttribute('autoplay', '');
 
-  // Mute first so autoplay is allowed, then unmute after playback starts
-  vid.muted = true;
+  
+  
 
   player.insertBefore(vid, document.getElementById('buf-overlay'));
 
   vid.addEventListener('canplay', function() { hideBuf(); });
   vid.addEventListener('playing', function() {
-    // Unmute once playing — this is the key fix for iOS 9 standalone black screen
-    vid.muted = false;
+    
+    
     hideBuf();
     state.playing = true;
     setPlayIcon(true);
