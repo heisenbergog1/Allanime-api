@@ -560,8 +560,7 @@ function showTapToPlay(streamUrl) {
 }
 
 function startVideo(streamUrl) {
-  // Open in new tab — let iOS native player handle it
-  window.open(streamUrl, '_blank');
+  window.location.href = streamUrl;
 }
 
 function hideBuf() {
